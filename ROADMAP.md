@@ -12,6 +12,8 @@
 - [ ] Index Markdown file
 - [x] `stats` command
 - [x] `export-html` command
+- [x] Extract caption + hashtags from export
+- [x] Rich HTML export: tabs, hashtag filter, caption cards
 
 ## v0.2.x
 - [ ] Import `saved_collections.json` (named collections)

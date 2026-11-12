@@ -7,6 +7,7 @@ Supports both shapes seen in Meta exports:
                                 {"dict":[{"dict":[{"label":"Name","value":"user"}]}]}]}]
 """
 import json
+import re
 import zipfile
 from pathlib import Path
 from .models import Post
@@ -68,10 +69,22 @@ def _extract(record: dict, interaction: str) -> Post | None:
         if not url:
             return None
         creator = _find_label(labels, "Name", "Username", "Title") or "unknown"
+        caption = _find_label(labels, "Caption")
+        if caption:
+            caption = caption[:2000] or None
+        hashtags = None
+        if caption:
+            unique_tags = list(dict.fromkeys(
+                match.lower() for match in re.findall(r"#(\w+)", caption)
+            ))
+            hashtags = ",".join(unique_tags) or None
         ts = record.get("timestamp")
         timestamp = ts if isinstance(ts, int) else None
         try:
-            return Post(url=url, creator=creator, timestamp=timestamp, interaction=interaction)
+            return Post(
+                url=url, creator=creator, timestamp=timestamp,
+                interaction=interaction, caption=caption, hashtags=hashtags,
+            )
         except ValueError:
             return None
 

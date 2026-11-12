@@ -36,6 +36,8 @@ def cmd_import() -> None:
             timestamp=row["timestamp"],
             saved=bool(row["saved"]),
             liked=bool(row["liked"]),
+            caption=row["caption"],
+            hashtags=row["hashtags"],
         )
     print(f"  Markdown written: {len(rows)} files in {KNOWLEDGE_DIR}")
 
@@ -77,7 +79,7 @@ def cmd_stats() -> None:
         print(f"{year:<22}{count:>10}")
 
 
-# Export the library to a single offline HTML page with live search and filters.
+# Export all posts into a searchable, responsive offline HTML library.
 def cmd_export_html() -> None:
     rows = export_rows_as_dicts()
     ensure_dirs()
@@ -93,138 +95,184 @@ def cmd_export_html() -> None:
   <title>Instagram Knowledge Library</title>
   <style>
     :root { color-scheme: light; font-family: system-ui, sans-serif; }
-    body { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #202124; }
-    h1 { margin-bottom: 0.3rem; }
-    .controls { display: grid; gap: 0.8rem; margin: 1.5rem 0; }
-    input[type="search"], select { box-sizing: border-box; width: 100%; padding: 0.7rem; }
-    .checks { display: flex; flex-wrap: wrap; gap: 1rem; }
-    .checks label { white-space: nowrap; }
+    body { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; color: #202124; }
+    h1 { margin: 0 0 .4rem; }
+    .totals { color: #555; margin-bottom: 1.5rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; margin: 1.2rem 0; }
+    input[type="search"], select { box-sizing: border-box; padding: .65rem; border: 1px solid #ddd; border-radius: .4rem; background: white; color: #202124; }
+    input[type="search"] { flex: 1 1 280px; }
+    select { flex: 0 1 220px; }
+    .tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+    .tab { cursor: pointer; border: 1px solid #ddd; border-radius: 999px; padding: .5rem .9rem; background: white; color: #202124; }
+    .tab.active { background: #202124; color: white; border-color: #202124; }
     #result-count { color: #555; margin: 1rem 0; }
-    #results { display: grid; gap: 0.7rem; padding: 0; list-style: none; }
-    .post { border: 1px solid #ddd; border-radius: 0.5rem; padding: 1rem; }
-    .post-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; }
+    #results { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; padding: 0; list-style: none; }
+    .post { border: 1px solid #ddd; border-radius: .7rem; padding: 1rem; background: #fff; transition: box-shadow .15s ease, transform .15s ease; }
+    .post:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); transform: translateY(-2px); }
+    .post-head { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; margin-bottom: .7rem; }
     .creator { font-weight: 700; }
-    .date { color: #555; }
-    .tag { border-radius: 999px; padding: 0.15rem 0.6rem; background: #eee; font-size: 0.85rem; }
-    .tag.saved { background: #e7f2ff; }
-    .tag.liked { background: #ffe8ec; }
-    a { overflow-wrap: anywhere; }
+    .date { color: #666; font-size: .9rem; }
+    .chip, .hashtag { display: inline-block; border-radius: 999px; padding: .18rem .6rem; font-size: .82rem; }
+    .chip { background: #eee; }
+    .chip.saved { background: #e7f2ff; }
+    .chip.liked { background: #ffe8ec; }
+    .caption { line-height: 1.45; margin: .6rem 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+    .hashtags { display: flex; flex-wrap: wrap; gap: .35rem; margin: .6rem 0; }
+    .hashtag { background: #f1f1f1; }
+    .post-link { display: inline-block; overflow-wrap: anywhere; margin-top: .3rem; }
+    .empty { color: #555; padding: 1.5rem 0; }
   </style>
 </head>
 <body>
   <h1>Instagram Knowledge Library</h1>
-  <section class="controls" aria-label="Library filters">
-    <label>
-      Search creator or URL
-      <input id="search" type="search" placeholder="Type to filter..." autocomplete="off">
-    </label>
-    <div class="checks">
-      <label><input id="saved-only" type="checkbox" checked> Saved only</label>
-      <label><input id="liked-only" type="checkbox" checked> Liked only</label>
-      <label><input id="show-both" type="checkbox" checked> Both</label>
-    </div>
-    <label>
-      Creator
-      <select id="creator">
-        <option value="">All creators</option>
-      </select>
-    </label>
+  <p id="totals" class="totals"></p>
+  <div class="tabs" role="tablist" aria-label="Post type">
+    <button class="tab active" type="button" data-filter="all" aria-selected="true">All</button>
+    <button class="tab" type="button" data-filter="saved" aria-selected="false">Saved only</button>
+    <button class="tab" type="button" data-filter="liked" aria-selected="false">Liked only</button>
+    <button class="tab" type="button" data-filter="both" aria-selected="false">Both</button>
+  </div>
+  <section class="controls" aria-label="Search, hashtag and sort">
+    <input id="search" type="search" placeholder="Search creator, caption, hashtags or URL" autocomplete="off">
+    <select id="hashtag"><option value="">All hashtags</option></select>
+    <select id="sort" aria-label="Sort posts">
+      <option value="newest">Newest first</option>
+      <option value="oldest">Oldest first</option>
+      <option value="creator">Creator A-Z</option>
+    </select>
   </section>
   <p id="result-count" aria-live="polite"></p>
   <ul id="results"></ul>
   <script>
     const ROWS = __ROWS__;
+    const totals = document.getElementById("totals");
+    const savedCount = ROWS.filter((row) => row.saved).length;
+    const likedCount = ROWS.filter((row) => row.liked).length;
+    const bothCount = ROWS.filter((row) => row.saved && row.liked).length;
+    totals.textContent = `${ROWS.length} posts · ${savedCount} saved · ${likedCount} liked · ${bothCount} both`;
 
-    const creatorCounts = new Map();
-    ROWS.forEach((row) => {
-      creatorCounts.set(row.creator, (creatorCounts.get(row.creator) || 0) + 1);
-    });
-    const creatorSelect = document.getElementById("creator");
-    [...creatorCounts.entries()]
+    const hashtagCounts = new Map();
+    ROWS.forEach((row) => (row.hashtags || "").split(",").filter(Boolean).forEach((tag) => {
+      const normalized = tag.trim().toLocaleLowerCase();
+      if (normalized) hashtagCounts.set(normalized, (hashtagCounts.get(normalized) || 0) + 1);
+    }));
+    const hashtagSelect = document.getElementById("hashtag");
+    [...hashtagCounts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 50)
-      .forEach(([creator]) => {
+      .forEach(([tag]) => {
         const option = document.createElement("option");
-        option.value = creator;
-        option.textContent = creator;
-        creatorSelect.appendChild(option);
+        option.value = tag;
+        option.textContent = `#${tag}`;
+        hashtagSelect.appendChild(option);
       });
 
-    // Render the posts matching the current search text and filter controls.
+    let activeFilter = "all";
+    const searchInput = document.getElementById("search");
+    const sortSelect = document.getElementById("sort");
+
+    // Render matching records and build each card without inserting HTML strings.
     function renderResults() {
-      const query = document.getElementById("search").value.trim().toLocaleLowerCase();
-      const selectedCreator = creatorSelect.value;
-      const includeSaved = document.getElementById("saved-only").checked;
-      const includeLiked = document.getElementById("liked-only").checked;
-      const includeBoth = document.getElementById("show-both").checked;
+      const query = searchInput.value.trim().toLocaleLowerCase();
+      const selectedTag = hashtagSelect.value;
       const filtered = ROWS.filter((row) => {
-        const matchesText =
-          row.creator.toLocaleLowerCase().includes(query) ||
-          row.url.toLocaleLowerCase().includes(query);
-        const matchesCreator = !selectedCreator || row.creator === selectedCreator;
-        const category = row.saved && row.liked
-          ? "both"
-          : row.saved
-            ? "saved"
-            : "liked";
-        const matchesCategory =
-          (category === "saved" && includeSaved) ||
-          (category === "liked" && includeLiked) ||
-          (category === "both" && includeBoth);
-        return matchesText && matchesCreator && matchesCategory;
+        const categoryMatches = activeFilter === "all" ||
+          (activeFilter === "saved" && row.saved && !row.liked) ||
+          (activeFilter === "liked" && row.liked && !row.saved) ||
+          (activeFilter === "both" && row.saved && row.liked);
+        const searchText = [row.creator, row.caption, row.hashtags, row.url]
+          .join(" ").toLocaleLowerCase();
+        const rowTags = (row.hashtags || "").split(",").map((tag) => tag.trim().toLocaleLowerCase());
+        return categoryMatches && searchText.includes(query) && (!selectedTag || rowTags.includes(selectedTag));
+      });
+
+      const sortMode = sortSelect.value;
+      filtered.sort((a, b) => {
+        if (sortMode === "creator") return a.creator.localeCompare(b.creator, undefined, {sensitivity: "base"});
+        const aTime = a.date === "unknown" ? 0 : Date.parse(a.date) || 0;
+        const bTime = b.date === "unknown" ? 0 : Date.parse(b.date) || 0;
+        return sortMode === "oldest" ? aTime - bTime : bTime - aTime;
       });
 
       const results = document.getElementById("results");
       results.replaceChildren();
-      document.getElementById("result-count").textContent =
-        `${filtered.length} result${filtered.length === 1 ? "" : "s"}`;
+      document.getElementById("result-count").textContent = `Showing ${filtered.length} of ${ROWS.length} posts`;
+      if (ROWS.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "empty";
+        empty.textContent = "No posts to display.";
+        results.appendChild(empty);
+        return;
+      }
 
       filtered.forEach((row) => {
-        const item = document.createElement("li");
-        item.className = "post";
-        const line = document.createElement("div");
-        line.className = "post-line";
-
+        const card = document.createElement("li");
+        card.className = "post";
+        const head = document.createElement("div");
+        head.className = "post-head";
         const creator = document.createElement("span");
         creator.className = "creator";
-        creator.textContent = row.creator;
-        line.appendChild(creator);
-
+        creator.textContent = row.creator || "unknown";
+        head.appendChild(creator);
         const date = document.createElement("span");
         date.className = "date";
-        date.textContent = row.date;
-        line.appendChild(date);
-
+        date.textContent = row.date || "unknown";
+        head.appendChild(date);
         if (row.saved) {
-          const tag = document.createElement("span");
-          tag.className = "tag saved";
-          tag.textContent = "saved";
-          line.appendChild(tag);
+          const chip = document.createElement("span");
+          chip.className = "chip saved";
+          chip.textContent = "saved";
+          head.appendChild(chip);
         }
         if (row.liked) {
-          const tag = document.createElement("span");
-          tag.className = "tag liked";
-          tag.textContent = "liked";
-          line.appendChild(tag);
+          const chip = document.createElement("span");
+          chip.className = "chip liked";
+          chip.textContent = "liked";
+          head.appendChild(chip);
         }
+        card.appendChild(head);
+
+        const caption = document.createElement("p");
+        caption.className = "caption";
+        caption.textContent = row.caption || (() => {
+          try { const parsed = new URL(row.url); return (parsed.host + parsed.pathname).slice(0, 180); }
+          catch (_) { return (row.url || "").slice(0, 180); }
+        })();
+        card.appendChild(caption);
+
+        const tagList = document.createElement("div");
+        tagList.className = "hashtags";
+        (row.hashtags || "").split(",").filter(Boolean).forEach((tagText) => {
+          const tag = document.createElement("span");
+          tag.className = "hashtag";
+          tag.textContent = `#${tagText.trim()}`;
+          tagList.appendChild(tag);
+        });
+        card.appendChild(tagList);
 
         const link = document.createElement("a");
-        link.textContent = row.url;
-        link.href = row.url;
+        link.className = "post-link";
+        link.textContent = row.url || "";
+        link.href = row.url || "#";
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        line.appendChild(link);
-
-        item.appendChild(line);
-        results.appendChild(item);
+        card.appendChild(link);
+        results.appendChild(card);
       });
     }
 
-    document.getElementById("search").addEventListener("input", renderResults);
-    document.getElementById("saved-only").addEventListener("change", renderResults);
-    document.getElementById("liked-only").addEventListener("change", renderResults);
-    document.getElementById("show-both").addEventListener("change", renderResults);
-    creatorSelect.addEventListener("change", renderResults);
+    document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+      activeFilter = tab.dataset.filter;
+      document.querySelectorAll(".tab").forEach((item) => {
+        const isActive = item === tab;
+        item.classList.toggle("active", isActive);
+        item.setAttribute("aria-selected", String(isActive));
+      });
+      renderResults();
+    }));
+    searchInput.addEventListener("input", renderResults);
+    hashtagSelect.addEventListener("change", renderResults);
+    sortSelect.addEventListener("change", renderResults);
     renderResults();
   </script>
 </body>

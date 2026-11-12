@@ -12,10 +12,10 @@ def _build_temp_db(tmp_path, monkeypatch):
         conn.executescript(database.SCHEMA)
         conn.execute(
             """
-            INSERT INTO posts (url, creator, timestamp, saved, liked)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO posts (url, creator, timestamp, saved, liked, caption, hashtags)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            ("https://example.com/known-post", "known_creator", 1704067200, 1, 0),
+            ("https://example.com/known-post", "known_creator", 1704067200, 1, 0, None, None),
         )
     return db_path
 
@@ -34,3 +34,22 @@ def test_export_html_creates_file(tmp_path, monkeypatch):
     contents = output_file.read_text(encoding="utf-8")
     assert "<html" in contents
     assert "https://example.com/known-post" in contents
+
+
+# Check that captions and hashtags are included in the exported offline HTML data.
+def test_export_html_renders_caption(tmp_path, monkeypatch):
+    db_path = _build_temp_db(tmp_path, monkeypatch)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "UPDATE posts SET caption = ?, hashtags = ?",
+            ("hello world", "python,flask"),
+        )
+    output_dir = tmp_path / "caption-html-output"
+    monkeypatch.setattr(cli, "KNOWLEDGE_DIR", output_dir)
+    monkeypatch.setattr(cli, "ensure_dirs", lambda: None)
+
+    cli.cmd_export_html()
+
+    contents = (output_dir / "index.html").read_text(encoding="utf-8")
+    assert "hello world" in contents
+    assert "python,flask" in contents

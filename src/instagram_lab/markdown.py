@@ -15,7 +15,10 @@ def _slug(url: str) -> str:
 
 
 def write_post_row(url: str, creator: str, timestamp: int | None,
-                   saved: bool, liked: bool) -> Path:
+                   saved: bool, liked: bool, *,
+                   caption: str | None = None,
+                   hashtags: str | None = None) -> Path:
+    """Write one post's metadata and notes template as a Markdown file."""
     ensure_dirs()
     filename = f"{_slug(url)}.md"
     path = KNOWLEDGE_DIR / filename
@@ -31,6 +34,8 @@ def write_post_row(url: str, creator: str, timestamp: int | None,
     if saved: tags.append("saved")
     if liked: tags.append("liked")
     interaction = "+".join(tags) or "unknown"
+    caption_text = caption or "(no caption)"
+    hashtags_text = hashtags or "(none)"
 
     content = f"""---
 url: {url}
@@ -38,6 +43,7 @@ creator: {creator}
 date: {date_str}
 saved: {str(saved).lower()}
 liked: {str(liked).lower()}
+hashtags: {hashtags_text}
 ---
 
 # @{creator} — {interaction}
@@ -47,6 +53,14 @@ liked: {str(liked).lower()}
 - **Date:** {date_str}
 - **Saved:** {saved}
 - **Liked:** {liked}
+
+## Caption
+
+{caption_text}
+
+## Hashtags
+
+{hashtags_text}
 
 ## Notes
 

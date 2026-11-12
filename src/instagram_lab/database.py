@@ -11,17 +11,31 @@ CREATE TABLE IF NOT EXISTS posts (
     creator     TEXT NOT NULL,
     timestamp   INTEGER,
     saved       INTEGER NOT NULL DEFAULT 0,
-    liked       INTEGER NOT NULL DEFAULT 0
+    liked       INTEGER NOT NULL DEFAULT 0,
+    caption     TEXT,
+    hashtags    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_creator ON posts(creator);
 """
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add caption metadata columns to databases created by earlier versions."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(posts)")}
+    if "caption" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN caption TEXT")
+    if "hashtags" not in columns:
+        conn.execute("ALTER TABLE posts ADD COLUMN hashtags TEXT")
+
 
 def connect() -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
 
 def upsert_posts(posts: list[Post]) -> int:
     """Insert or update posts. Returns number of rows touched."""
@@ -33,22 +47,26 @@ def upsert_posts(posts: list[Post]) -> int:
             # Keep existing flags, OR them with the new one
             conn.execute(
                 """
-                INSERT INTO posts (url, creator, timestamp, saved, liked)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO posts (url, creator, timestamp, saved, liked, caption, hashtags)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                     saved   = MAX(posts.saved, excluded.saved),
                     liked   = MAX(posts.liked, excluded.liked),
                     creator = excluded.creator,
-                    timestamp = COALESCE(excluded.timestamp, posts.timestamp)
+                    timestamp = COALESCE(excluded.timestamp, posts.timestamp),
+                    caption = COALESCE(excluded.caption, posts.caption),
+                    hashtags = COALESCE(excluded.hashtags, posts.hashtags)
                 """,
-                (p.url, p.creator, p.timestamp, saved_flag, liked_flag),
+                (p.url, p.creator, p.timestamp, saved_flag, liked_flag, p.caption, p.hashtags),
             )
             touched += 1
     return touched
 
+
 def all_posts() -> list[sqlite3.Row]:
     with connect() as conn:
         return conn.execute("SELECT * FROM posts ORDER BY timestamp DESC").fetchall()
+
 
 def search(keyword: str) -> list[sqlite3.Row]:
     like = f"%{keyword}%"
@@ -104,20 +122,18 @@ def get_stats() -> dict:
 
 # Return every post as a plain dictionary with a UTC date string and boolean interaction flags.
 def export_rows_as_dicts() -> list[dict]:
-    conn = sqlite3.connect(DB_PATH)
-    try:
+    with connect() as conn:
         rows = conn.execute(
             """
-            SELECT url, creator, timestamp, saved, liked
+            SELECT url, creator, timestamp, saved, liked, caption, hashtags
             FROM posts
             ORDER BY timestamp DESC, creator COLLATE NOCASE ASC
             """
         ).fetchall()
-    finally:
-        conn.close()
 
     result = []
-    for url, creator, timestamp, saved, liked in rows:
+    for row in rows:
+        url, creator, timestamp, saved, liked, caption, hashtags = row
         date = "unknown"
         if timestamp is not None:
             try:
@@ -132,5 +148,7 @@ def export_rows_as_dicts() -> list[dict]:
             "date": date,
             "saved": bool(saved),
             "liked": bool(liked),
+            "caption": caption or "",
+            "hashtags": hashtags or "",
         })
     return result

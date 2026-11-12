@@ -7,6 +7,8 @@ class Post:
     creator: str             # username
     timestamp: int | None    # unix epoch seconds, may be None
     interaction: str         # "saved" or "liked"
+    caption: str | None = None
+    hashtags: str | None = None
 
     def __post_init__(self):
         if self.interaction not in {"saved", "liked"}:
