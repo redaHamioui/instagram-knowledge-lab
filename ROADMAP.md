@@ -10,6 +10,12 @@
 - [ ] Duplicate detection
 - [ ] Filters (creator, date, type)
 - [ ] Index Markdown file
+- [x] `stats` command
+- [x] `export-html` command
+
+## v0.2.x
+- [ ] Import `saved_collections.json` (named collections)
+- [ ] Ignore `liked_comments.json` (not posts)
 
 ## v0.3 — Enrichment
 - [ ] Media download (yt-dlp)
