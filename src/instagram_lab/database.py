@@ -1,5 +1,6 @@
 """SQLite storage. One table, simple and safe."""
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from .models import Post
 from .config import DB_PATH, ensure_dirs
@@ -56,3 +57,80 @@ def search(keyword: str) -> list[sqlite3.Row]:
             "SELECT * FROM posts WHERE url LIKE ? OR creator LIKE ? LIMIT 50",
             (like, like),
         ).fetchall()
+
+# Return interaction totals, the ten most frequent creators, and post counts by UTC year.
+def get_stats() -> dict:
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        totals = conn.execute(
+            """
+            SELECT
+                COUNT(*),
+                COALESCE(SUM(saved = 1 AND liked = 0), 0),
+                COALESCE(SUM(saved = 0 AND liked = 1), 0),
+                COALESCE(SUM(saved = 1 AND liked = 1), 0)
+            FROM posts
+            """
+        ).fetchone()
+        top_creators = conn.execute(
+            """
+            SELECT creator, COUNT(*) AS post_count
+            FROM posts
+            GROUP BY creator
+            ORDER BY post_count DESC, creator COLLATE NOCASE ASC
+            LIMIT 10
+            """
+        ).fetchall()
+        year_rows = conn.execute(
+            """
+            SELECT strftime('%Y', timestamp, 'unixepoch') AS year, COUNT(*)
+            FROM posts
+            WHERE timestamp IS NOT NULL
+            GROUP BY year
+            HAVING year IS NOT NULL
+            ORDER BY year
+            """
+        ).fetchall()
+        return {
+            "total": totals[0],
+            "saved_only": totals[1],
+            "liked_only": totals[2],
+            "both": totals[3],
+            "top_creators": [(row[0], row[1]) for row in top_creators],
+            "per_year": {row[0]: row[1] for row in year_rows},
+        }
+    finally:
+        conn.close()
+
+# Return every post as a plain dictionary with a UTC date string and boolean interaction flags.
+def export_rows_as_dicts() -> list[dict]:
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        rows = conn.execute(
+            """
+            SELECT url, creator, timestamp, saved, liked
+            FROM posts
+            ORDER BY timestamp DESC, creator COLLATE NOCASE ASC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    result = []
+    for url, creator, timestamp, saved, liked in rows:
+        date = "unknown"
+        if timestamp is not None:
+            try:
+                date = datetime.fromtimestamp(
+                    int(timestamp), tz=timezone.utc
+                ).strftime("%Y-%m-%d")
+            except (OverflowError, OSError, TypeError, ValueError):
+                pass
+        result.append({
+            "url": url,
+            "creator": creator,
+            "date": date,
+            "saved": bool(saved),
+            "liked": bool(liked),
+        })
+    return result
