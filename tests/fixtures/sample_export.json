@@ -1,0 +1,18 @@
+{
+  "likes_media_likes": [
+    {
+      "title": "fake_creator_1",
+      "string_list_data": [
+        { "href": "https://www.instagram.com/p/FAKE001/", "timestamp": 1700000000 }
+      ]
+    }
+  ],
+  "saved_posts": [
+    {
+      "title": "fake_creator_2",
+      "string_list_data": [
+        { "href": "https://www.instagram.com/reel/FAKE002/", "timestamp": 1700100000 }
+      ]
+    }
+  ]
+}

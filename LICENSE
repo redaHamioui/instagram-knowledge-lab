@@ -19,3 +19,47 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+### 10.2 Fill `ROADMAP.md`
+
+```markdown
+# Roadmap
+
+## v0.1 — MVP (done)
+
+- [x] Parse Instagram export (saved + liked).
+- [x] Store in SQLite.
+- [x] Generate Markdown per post.
+- [x] Basic keyword search.
+
+## v0.2 — Better library
+
+- [ ] Detect and report duplicate URLs across saved and liked.
+- [ ] Rich filters: by creator, by date, by interaction.
+- [ ] Export a single index Markdown file.
+- [ ] Better error reporting on malformed exports.
+
+## v0.3 — Enrichment (local)
+
+- [ ] Download accessible media with `yt-dlp` (opt-in).
+- [ ] Extract audio with `ffmpeg`.
+- [ ] Transcribe with `whisper` (local model).
+- [ ] Add transcript into each Markdown file.
+
+## v0.4 — AI analysis
+
+- [ ] Summarize each post.
+- [ ] Extract key concepts and tools.
+- [ ] Auto-categorize into topics.
+
+## v0.5 — Search upgrade
+
+- [ ] Full-text search with SQLite FTS5.
+- [ ] Semantic search with local embeddings.
+
+## v1.0 — Multi-provider
+
+- [ ] Create `youtube-knowledge-lab`.
+- [ ] Create `chrome-knowledge-lab`.
+- [ ] Create `personal-knowledge-hub` for cross-provider search.
