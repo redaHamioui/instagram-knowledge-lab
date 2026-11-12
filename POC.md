@@ -11,6 +11,11 @@ A local-first personal knowledge tool. Reads your own Instagram data export
 SQLite database, and writes one Markdown file per post. Then you can search
 your 6,000+ saved/liked posts offline — by creator, URL, or keyword.
 
+This is a **personal** archive tool. It processes only the user's own
+Instagram data export — public fields (URL, creator handle, caption) and
+the user's own behavior (saved, liked). See [DATA_HANDLING.md](./DATA_HANDLING.md)
+for the full, explicit data scope.
+
 **No scraping. No login. No cookies. No cloud.** Your export stays in
 `data/raw/`, which is gitignored. Nothing is uploaded.
 
@@ -111,3 +116,8 @@ training. Public under MIT license.
 
 See `ROADMAP.md`. v0.2 (stats + HTML) done; v0.3 (media + transcription),
 v0.4 (AI summaries), v1.0 (multi-provider).
+
+## Data scope
+
+See [DATA_HANDLING.md](./DATA_HANDLING.md) for the exact list of fields
+stored and never stored.

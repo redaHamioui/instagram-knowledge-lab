@@ -1,4 +1,9 @@
-# Instagram Knowledge Lab
+# Instagram Personal Archive Manager
+
+> A local-first knowledge manager for **your own** Instagram activity —
+> saved, liked, and self-authored posts. Turns your personal data export
+> into a searchable, offline Markdown + SQLite library. No scraping, no
+> login, no cloud. See `DATA_HANDLING.md` for the explicit data scope.
 
 A local-first personal library that turns your Instagram data export into a
 searchable Markdown knowledge base.
@@ -30,3 +35,8 @@ searchable Markdown knowledge base.
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+## Data scope
+
+See [DATA_HANDLING.md](./DATA_HANDLING.md) for the exact list of fields
+stored and never stored.
