@@ -22,7 +22,7 @@ def _build_zip(tmp_path, data):
 
 def test_import_finds_both(tmp_path):
     data = json.loads(FIXTURE.read_text())
-    posts = import_export(_build_zip(tmp_path, data))
+    posts = import_export(_build_zip(tmp_path, data), mode="all")
 
     # Order-independent checks
     assert len(posts) == 2
@@ -33,7 +33,7 @@ def test_import_finds_both(tmp_path):
 
 def test_import_maps_interaction_to_creator(tmp_path):
     data = json.loads(FIXTURE.read_text())
-    posts = import_export(_build_zip(tmp_path, data))
+    posts = import_export(_build_zip(tmp_path, data), mode="all")
 
     by_interaction = {p.interaction: p for p in posts}
     assert by_interaction["liked"].creator == "fake_creator_1"

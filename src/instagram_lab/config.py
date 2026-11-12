@@ -11,7 +11,13 @@ KNOWLEDGE_DIR = DATA_DIR / "knowledge"
 
 DB_PATH = DB_DIR / "library.db"
 
+
 def ensure_dirs() -> None:
     """Create every folder we need if it does not exist."""
     for folder in (RAW_DIR, DB_DIR, KNOWLEDGE_DIR):
         folder.mkdir(parents=True, exist_ok=True)
+
+
+# Default import mode. "own" = only the user's own posts (BYOP-safe).
+# "all" = own + saved + liked (opt-in).
+DEFAULT_MODE = "own"

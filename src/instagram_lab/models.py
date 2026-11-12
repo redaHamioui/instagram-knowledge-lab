@@ -6,12 +6,12 @@ class Post:
     url: str                 # unique ID of the post
     creator: str             # username
     timestamp: int | None    # unix epoch seconds, may be None
-    interaction: str         # "saved" or "liked"
+    interaction: str         # "saved", "liked", or "own"
     caption: str | None = None
     hashtags: str | None = None
 
     def __post_init__(self):
-        if self.interaction not in {"saved", "liked"}:
+        if self.interaction not in {"saved", "liked", "own"}:
             raise ValueError(f"Unknown interaction: {self.interaction}")
-        if not self.url.startswith("http"):
+        if not self.url.startswith(("http", "instagram://own/")):
             raise ValueError(f"Invalid URL: {self.url}")

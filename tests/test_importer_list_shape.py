@@ -1,6 +1,6 @@
 import json, zipfile
-from pathlib import Path
 from src.instagram_lab.importer import import_export
+
 
 def test_list_root_liked(tmp_path):
     zip_path = tmp_path / "listroot.zip"
@@ -11,7 +11,7 @@ def test_list_root_liked(tmp_path):
     with zipfile.ZipFile(zip_path, "w") as zf:
         zf.writestr("liked_posts.json", json.dumps(payload))
 
-    posts = import_export(zip_path)
+    posts = import_export(zip_path, mode="all")
     assert len(posts) == 2
     assert {p.interaction for p in posts} == {"liked"}
     assert {p.creator for p in posts} == {"user_a", "user_b"}

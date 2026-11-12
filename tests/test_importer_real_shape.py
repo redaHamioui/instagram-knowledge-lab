@@ -22,7 +22,7 @@ def test_new_label_values_shape(tmp_path):
     with zipfile.ZipFile(zp, "w") as zf:
         zf.writestr("liked_posts.json", json.dumps(payload))
 
-    posts = import_export(zp)
+    posts = import_export(zp, mode="all")
     assert len(posts) == 2
     assert {p.interaction for p in posts} == {"liked"}
     assert {p.creator for p in posts} == {"creator_a", "creator_b"}

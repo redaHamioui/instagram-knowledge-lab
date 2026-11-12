@@ -1,7 +1,7 @@
 """CLI: `uv run python main.py <command>`."""
 import json
 import sys
-from .config import RAW_DIR, KNOWLEDGE_DIR, ensure_dirs
+from .config import RAW_DIR, KNOWLEDGE_DIR, DEFAULT_MODE, ensure_dirs
 from .importer import import_export
 from .database import (
     upsert_posts,
@@ -13,7 +13,7 @@ from .markdown import write_post_row
 from .search import print_results
 
 
-def cmd_import() -> None:
+def cmd_import(mode: str = DEFAULT_MODE) -> None:
     ensure_dirs()
     zips = sorted(RAW_DIR.glob("*.zip"))
     if not zips:
@@ -21,9 +21,10 @@ def cmd_import() -> None:
         print("Put your Instagram export ZIP there first.")
         return
 
+    print(f"  Mode: {mode}")
     for z in zips:
         print(f"Importing: {z.name}")
-        posts = import_export(z)
+        posts = import_export(z, mode=mode)
         print(f"  Found {len(posts)} raw records")
         touched = upsert_posts(posts)
         print(f"  Saved to database: {touched}")
@@ -67,12 +68,10 @@ def cmd_stats() -> None:
     print(f"{'Saved only':<22}{stats['saved_only']:>10}")
     print(f"{'Liked only':<22}{stats['liked_only']:>10}")
     print(f"{'Both saved and liked':<22}{stats['both']:>10}")
-
     print("\nTop creators")
     print(f"{'Creator':<32}{'Posts':>10}")
     for creator, count in stats["top_creators"]:
         print(f"{creator:<32}{count:>10}")
-
     print("\nPosts per year (UTC)")
     print(f"{'Year':<22}{'Posts':>10}")
     for year, count in stats["per_year"].items():
@@ -85,326 +84,31 @@ def cmd_export_html() -> None:
     ensure_dirs()
     output_path = KNOWLEDGE_DIR / "index.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
     embedded_rows = json.dumps(rows, ensure_ascii=False).replace("<", "\\u003c")
     html = """<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Instagram Knowledge Library</title>
-  <style>
-    :root { color-scheme: light; font-family: system-ui, sans-serif; }
-    * { box-sizing: border-box; }
-    body { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; color: #202124; }
-    .site-header { position: sticky; top: 0; z-index: 5; margin: -2rem -1rem 1rem; padding: 1.2rem 1rem .8rem; background: rgba(255,255,255,.97); border-bottom: 1px solid #eee; }
-    h1 { margin: 0 0 .35rem; }
-    .totals { color: #555; margin: 0 0 .75rem; }
-    .tabs { display: flex; flex-wrap: wrap; gap: .5rem; }
-    .tab { cursor: pointer; border: 1px solid #ddd; border-radius: 999px; padding: .45rem .85rem; background: white; color: #202124; }
-    .tab.active { background: #202124; color: white; border-color: #202124; }
-    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: .7rem; margin: 1.2rem 0; }
-    input[type="search"], select { min-width: 0; width: 100%; padding: .65rem; border: 1px solid #ddd; border-radius: .4rem; background: white; color: #202124; }
-    #result-count { color: #555; margin: 1rem 0; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; padding: 0; list-style: none; }
-    .post { display: flex; flex-direction: column; gap: .6rem; min-width: 0; padding: 1rem; background: #fff; border: 1px solid #ddd; border-radius: .5rem; transition: box-shadow .15s ease, border-color .15s ease; }
-    .post:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); border-color: #aaa; }
-    .post-title { margin: 0; font-size: 1.05rem; line-height: 1.3; font-weight: 700; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-    .meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; color: #555; font-size: .88rem; }
-    .badge, .category-chip { display: inline-block; border-radius: 999px; padding: .18rem .55rem; font-size: .8rem; }
-    .badge { background: #eee; }
-    .badge.saved { background: #e7f2ff; }
-    .badge.liked { background: #ffe8ec; }
-    .description { margin: 0; color: #444; font-size: .92rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden; }
-    .description.expanded { display: block; }
-    .read-more { align-self: flex-start; padding: 0; border: 0; background: none; color: #315f9b; cursor: pointer; font: inherit; font-size: .88rem; }
-    .hashtags { display: flex; flex-wrap: wrap; gap: .35rem; }
-    .hashtag { border-radius: 999px; padding: .18rem .55rem; background: #f1f1f1; color: #555; font-size: .8rem; }
-    .card-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-top: auto; padding-top: .2rem; }
-    .category-chip { color: #333; }
-    .category-ai { background: #e3f0ff; } .category-python { background: #fff4e0; }
-    .category-linux { background: #e8f5e9; } .category-security { background: #ffebee; }
-    .category-web { background: #f3e5f5; } .category-business { background: #fce4ec; }
-    .category-design { background: #e0f7fa; } .category-video { background: #f1f8e9; }
-    .category-opensource { background: #f5f5f5; } .category-maroc { background: #fff8e1; }
-    .category-other { background: #eeeeee; }
-    .post-link { text-align: right; overflow-wrap: anywhere; font-size: .9rem; }
-    .group-section { margin: 1.6rem 0 2rem; }
-    .group-heading { margin: 0 0 .8rem; padding-bottom: .45rem; border-bottom: 1px solid #eee; color: #555; font-size: 1.1rem; font-weight: 600; }
-    .empty { color: #555; padding: 1.5rem 0; list-style: none; }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instagram Knowledge Library</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,sans-serif}*{box-sizing:border-box}body{max-width:1200px;margin:2rem auto;padding:0 1rem;color:#202124}.site-header{position:sticky;top:0;z-index:5;margin:-2rem -1rem 1rem;padding:1.2rem 1rem .8rem;background:rgba(255,255,255,.97);border-bottom:1px solid #eee}h1{margin:0 0 .35rem}.totals{color:#555;margin:0 0 .75rem}.tabs{display:flex;flex-wrap:wrap;gap:.5rem}.tab{cursor:pointer;border:1px solid #ddd;border-radius:999px;padding:.45rem .85rem;background:white;color:#202124}.tab.active{background:#202124;color:white;border-color:#202124}.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:.7rem;margin:1.2rem 0}input,select{min-width:0;width:100%;padding:.65rem;border:1px solid #ddd;border-radius:.4rem;background:white;color:#202124}#result-count{color:#555;margin:1rem 0}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:1rem;padding:0;list-style:none}.post{display:flex;flex-direction:column;gap:.6rem;min-width:0;padding:1rem;background:#fff;border:1px solid #ddd;border-radius:.5rem}.post:hover{box-shadow:0 4px 16px #0001;border-color:#aaa}.post-title{margin:0;font-size:1.05rem;line-height:1.3}.meta{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;color:#555;font-size:.88rem}.badge,.category-chip,.hashtag{display:inline-block;border-radius:999px;padding:.18rem .55rem;font-size:.8rem}.badge{background:#eee}.badge.saved{background:#e7f2ff}.badge.liked{background:#ffe8ec}.description{margin:0;color:#444;font-size:.92rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;max-height:6em;overflow:hidden}.description.expanded{max-height:none}.read-more{align-self:flex-start;border:0;background:none;color:#315f9b;cursor:pointer;font:inherit}.hashtags{display:flex;flex-wrap:wrap;gap:.35rem}.hashtag{background:#f1f1f1;color:#555}.card-footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-top:auto}.category-chip{background:#e3f0ff}.post-link{overflow-wrap:anywhere;font-size:.9rem}.group-section{margin:1.6rem 0 2rem}.group-heading{border-bottom:1px solid #eee;color:#555;font-size:1.1rem}.empty{color:#555;padding:1.5rem 0}
+</style>
 </head>
-<body>
-  <header class="site-header">
-    <h1>Instagram Knowledge Library</h1>
-    <p id="totals" class="totals"></p>
-    <div class="tabs" role="tablist" aria-label="Post type">
-      <button class="tab active" type="button" data-filter="all" aria-selected="true">All</button>
-      <button class="tab" type="button" data-filter="saved" aria-selected="false">Saved</button>
-      <button class="tab" type="button" data-filter="liked" aria-selected="false">Liked</button>
-      <button class="tab" type="button" data-filter="both" aria-selected="false">Both</button>
-    </div>
-  </header>
-  <section class="controls" aria-label="Search, category, hashtag, sort and grouping">
-    <input id="search" type="search" placeholder="Search creator, title, caption, hashtags or URL" autocomplete="off">
-    <select id="category" aria-label="Filter by category"><option value="">All categories</option></select>
-    <select id="hashtag" aria-label="Filter by hashtag"><option value="">All hashtags</option></select>
-    <select id="sort" aria-label="Sort posts">
-      <option value="newest">Newest</option>
-      <option value="oldest">Oldest</option>
-      <option value="creator">Creator A-Z</option>
-    </select>
-    <select id="group" aria-label="Group posts">
-      <option value="none">Group by: None</option>
-      <option value="category">Group by: By category</option>
-      <option value="type">Group by: By type</option>
-    </select>
-  </section>
-  <p id="result-count" aria-live="polite"></p>
-  <div id="results"></div>
-  <script>
-    const ROWS = __ROWS__;
-    const CATEGORIES = ["AI / LLM", "Python", "Linux / DevOps", "Security", "Web Dev", "Business", "Design", "Video / Content", "Open Source", "Maroc", "Other"];
-    const CATEGORY_KEYWORDS = {
-      "AI / LLM": ["ai", "ia", "gpt", "chatgpt", "claude", "llm", "openai", "artificialintelligence", "machinelearning", "deeplearning", "prompt"],
-      "Python": ["python", "django", "flask", "fastapi", "pandas", "numpy"],
-      "Linux / DevOps": ["linux", "ubuntu", "debian", "docker", "kubernetes", "k8s", "bash", "shell", "devops", "ansible", "nginx"],
-      "Security": ["security", "cybersecurity", "hacker", "hacking", "hack", "ctf", "pentest", "malware", "infosec"],
-      "Web Dev": ["javascript", "js", "typescript", "react", "vue", "node", "html", "css", "frontend", "backend", "api"],
-      "Business": ["business", "entrepreneur", "startup", "marketing", "sales", "ecommerce", "money"],
-      "Design": ["design", "ui", "ux", "figma", "photoshop", "creative"],
-      "Video / Content": ["video", "youtube", "reel", "reels", "content", "tiktok", "creator"],
-      "Open Source": ["opensource", "github", "gitlab", "foss", "free"],
-      "Maroc": ["maroc", "morocco", "marocaine", "rabat", "casablanca", "marrakech"]
-    };
-    const CATEGORY_CLASSES = {
-      "AI / LLM": "category-ai", "Python": "category-python", "Linux / DevOps": "category-linux",
-      "Security": "category-security", "Web Dev": "category-web", "Business": "category-business",
-      "Design": "category-design", "Video / Content": "category-video", "Open Source": "category-opensource",
-      "Maroc": "category-maroc", "Other": "category-other"
-    };
-
-    // Classify a row from keyword matches in its caption and hashtags.
-    function classifyRow(row) {
-      const tokens = (String(row.caption || "") + " " + String(row.hashtags || ""))
-        .toLocaleLowerCase().match(/[\\p{L}\\p{N}]+/gu) || [];
-      const tokenSet = new Set(tokens);
-      let bestCategory = "Other";
-      let bestScore = 0;
-      CATEGORIES.slice(0, -1).forEach((category) => {
-        const score = CATEGORY_KEYWORDS[category].reduce((count, keyword) => count + (tokenSet.has(keyword) ? 1 : 0), 0);
-        if (score > bestScore) { bestCategory = category; bestScore = score; }
-      });
-      row.category = bestCategory;
-      const firstLine = String(row.caption || "").split(/\\r?\\n/, 1)[0]
-        .replace(/#\\w+/g, " ").replace(/\\s+/g, " ").trim();
-      row.title = firstLine
-        ? (firstLine.length > 90 ? firstLine.slice(0, 89).trimEnd() + "…" : firstLine)
-        : `@${row.creator || "unknown"} — ${row.date || "unknown"}`;
-      if (row.caption) {
-        row.description = row.caption;
-      } else {
-        try { row.description = new URL(row.url).hostname; }
-        catch (_) { row.description = row.url || ""; }
-      }
-      return row;
-    }
-    ROWS.forEach(classifyRow);
-
-    const savedCount = ROWS.filter((row) => row.saved).length;
-    const likedCount = ROWS.filter((row) => row.liked).length;
-    const bothCount = ROWS.filter((row) => row.saved && row.liked).length;
-    const representedCategories = new Set(ROWS.map((row) => row.category));
-    document.getElementById("totals").textContent = `${ROWS.length} posts · ${savedCount} saved · ${likedCount} liked · ${bothCount} both · ${representedCategories.size} categories`;
-
-    const categorySelect = document.getElementById("category");
-    CATEGORIES.forEach((category) => {
-      const option = document.createElement("option");
-      option.value = category;
-      option.textContent = category;
-      categorySelect.appendChild(option);
-    });
-    const hashtagCounts = new Map();
-    ROWS.forEach((row) => (row.hashtags || "").split(",").filter(Boolean).forEach((tag) => {
-      const normalized = tag.trim().toLocaleLowerCase();
-      if (normalized) hashtagCounts.set(normalized, (hashtagCounts.get(normalized) || 0) + 1);
-    }));
-    const hashtagSelect = document.getElementById("hashtag");
-    [...hashtagCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 50).forEach(([tag]) => {
-      const option = document.createElement("option");
-      option.value = tag;
-      option.textContent = `#${tag}`;
-      hashtagSelect.appendChild(option);
-    });
-
-    let activeFilter = "all";
-    const searchInput = document.getElementById("search");
-    const sortSelect = document.getElementById("sort");
-    const groupSelect = document.getElementById("group");
-
-    // Sort a copy of the filtered records using the selected order.
-    function sortRows(rows) {
-      const sorted = rows.slice();
-      if (sortSelect.value === "creator") {
-        sorted.sort((a, b) => (a.creator || "").localeCompare(b.creator || "", undefined, {sensitivity: "base"}));
-      } else {
-        sorted.sort((a, b) => {
-          const aTime = a.date === "unknown" ? 0 : Date.parse(a.date) || 0;
-          const bTime = b.date === "unknown" ? 0 : Date.parse(b.date) || 0;
-          return sortSelect.value === "oldest" ? aTime - bTime : bTime - aTime;
-        });
-      }
-      return sorted;
-    }
-
-    // Build a safe rich card using DOM nodes and textContent for every record field.
-    function createCard(row) {
-      const card = document.createElement("article");
-      card.className = "post";
-      const title = document.createElement("h2");
-      title.className = "post-title";
-      title.textContent = row.title;
-      card.appendChild(title);
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      const creator = document.createElement("span");
-      creator.textContent = `@${row.creator || "unknown"}`;
-      meta.appendChild(creator);
-      const separator = document.createElement("span");
-      separator.textContent = "·";
-      meta.appendChild(separator);
-      const date = document.createElement("span");
-      date.textContent = row.date || "unknown";
-      meta.appendChild(date);
-      if (row.saved) {
-        const badge = document.createElement("span"); badge.className = "badge saved"; badge.textContent = "saved"; meta.appendChild(badge);
-      }
-      if (row.liked) {
-        const badge = document.createElement("span"); badge.className = "badge liked"; badge.textContent = "liked"; meta.appendChild(badge);
-      }
-      card.appendChild(meta);
-
-      const description = document.createElement("p");
-      description.className = "description";
-      description.textContent = row.description;
-      card.appendChild(description);
-      const readMore = document.createElement("button");
-      readMore.className = "read-more";
-      readMore.type = "button";
-      readMore.textContent = "Read more";
-      readMore.addEventListener("click", () => {
-        const expanded = description.classList.toggle("expanded");
-        readMore.textContent = expanded ? "Show less" : "Read more";
-      });
-      card.appendChild(readMore);
-
-      const hashtags = document.createElement("div");
-      hashtags.className = "hashtags";
-      const tagList = (row.hashtags || "").split(",").map((tag) => tag.trim()).filter(Boolean);
-      tagList.slice(0, 6).forEach((tagText) => {
-        const tag = document.createElement("span"); tag.className = "hashtag"; tag.textContent = `#${tagText}`; hashtags.appendChild(tag);
-      });
-      if (tagList.length > 6) {
-        const more = document.createElement("span"); more.className = "hashtag"; more.textContent = `+${tagList.length - 6} more`; hashtags.appendChild(more);
-      }
-      card.appendChild(hashtags);
-
-      const footer = document.createElement("div");
-      footer.className = "card-footer";
-      const category = document.createElement("span");
-      category.className = `category-chip ${CATEGORY_CLASSES[row.category] || CATEGORY_CLASSES.Other}`;
-      category.textContent = row.category;
-      footer.appendChild(category);
-      const link = document.createElement("a");
-      link.className = "post-link";
-      link.textContent = "Open on Instagram →";
-      link.href = row.url || "#";
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      footer.appendChild(link);
-      card.appendChild(footer);
-      return card;
-    }
-
-    // Render current filtered records as one grid or as count-sorted type/category groups.
-    function renderResults() {
-      const query = searchInput.value.trim().toLocaleLowerCase();
-      const selectedCategory = categorySelect.value;
-      const selectedTag = hashtagSelect.value;
-      const filtered = ROWS.filter((row) => {
-        const typeMatches = activeFilter === "all" ||
-          (activeFilter === "saved" && row.saved && !row.liked) ||
-          (activeFilter === "liked" && row.liked && !row.saved) ||
-          (activeFilter === "both" && row.saved && row.liked);
-        const searchText = [row.creator, row.title, row.caption, row.hashtags, row.url].join(" ").toLocaleLowerCase();
-        const rowTags = (row.hashtags || "").split(",").map((tag) => tag.trim().toLocaleLowerCase());
-        return typeMatches && (!selectedCategory || row.category === selectedCategory) &&
-          searchText.includes(query) && (!selectedTag || rowTags.includes(selectedTag));
-      });
-      const results = document.getElementById("results");
-      results.replaceChildren();
-      document.getElementById("result-count").textContent = `Showing ${filtered.length} of ${ROWS.length} posts`;
-      if (ROWS.length === 0) {
-        const empty = document.createElement("p"); empty.className = "empty"; empty.textContent = "No posts to display."; results.appendChild(empty); return;
-      }
-      const sorted = sortRows(filtered);
-      const mode = groupSelect.value;
-      if (mode === "none") {
-        const grid = document.createElement("div"); grid.className = "cards";
-        sorted.forEach((row) => grid.appendChild(createCard(row)));
-        results.appendChild(grid);
-        return;
-      }
-      const groups = new Map();
-      sorted.forEach((row) => {
-        let key;
-        if (mode === "category") key = row.category;
-        else if (row.saved && row.liked) key = "Both";
-        else if (row.saved) key = "Saved only";
-        else if (row.liked) key = "Liked only";
-        else key = "Neither";
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(row);
-      });
-      let groupEntries = [...groups.entries()];
-      if (mode === "category") {
-        groupEntries.sort((a, b) => {
-          if (a[0] === "Other") return 1;
-          if (b[0] === "Other") return -1;
-          return b[1].length - a[1].length || CATEGORIES.indexOf(a[0]) - CATEGORIES.indexOf(b[0]);
-        });
-      } else {
-        const typeOrder = ["Saved only", "Liked only", "Both", "Neither"];
-        groupEntries.sort((a, b) => typeOrder.indexOf(a[0]) - typeOrder.indexOf(b[0]));
-      }
-      groupEntries.forEach(([name, groupRows]) => {
-        const section = document.createElement("section"); section.className = "group-section";
-        const heading = document.createElement("h2"); heading.className = "group-heading"; heading.textContent = `${name} · ${groupRows.length} posts`; section.appendChild(heading);
-        const grid = document.createElement("div"); grid.className = "cards";
-        groupRows.forEach((row) => grid.appendChild(createCard(row)));
-        section.appendChild(grid); results.appendChild(section);
-      });
-    }
-
-    document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
-      activeFilter = tab.dataset.filter;
-      document.querySelectorAll(".tab").forEach((item) => {
-        const isActive = item === tab; item.classList.toggle("active", isActive); item.setAttribute("aria-selected", String(isActive));
-      });
-      renderResults();
-    }));
-    searchInput.addEventListener("input", renderResults);
-    categorySelect.addEventListener("change", renderResults);
-    hashtagSelect.addEventListener("change", renderResults);
-    sortSelect.addEventListener("change", renderResults);
-    groupSelect.addEventListener("change", renderResults);
-    renderResults();
-  </script>
-</body>
-</html>
-""".replace("__ROWS__", embedded_rows)
-
+<body><header class="site-header"><h1>Instagram Knowledge Library</h1><p id="totals" class="totals"></p><div class="tabs" role="tablist" aria-label="Post type"><button class="tab active" data-filter="all">All</button><button class="tab" data-filter="saved">Saved</button><button class="tab" data-filter="liked">Liked</button><button class="tab" data-filter="both">Both</button></div></header>
+<section class="controls" aria-label="Search, category, hashtag, sort and grouping"><input id="search" type="search" placeholder="Search creator, title, caption, hashtags or URL" autocomplete="off"><select id="category"><option value="">All categories</option></select><select id="hashtag"><option value="">All hashtags</option></select><select id="sort"><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="creator">Creator A-Z</option></select><select id="group"><option value="none">Group by: None</option><option value="category">Group by: By category</option><option value="type">Group by: By type</option></select></section><p id="result-count" aria-live="polite"></p><div id="results"></div>
+<script>
+const ROWS=__ROWS__;
+const CATEGORIES=["AI / LLM","Python","Linux / DevOps","Security","Web Dev","Business","Design","Video / Content","Open Source","Maroc","Other"];
+const CATEGORY_KEYWORDS={"AI / LLM":["ai","ia","gpt","chatgpt","claude","llm","openai","machinelearning","deeplearning","prompt"],Python:["python","django","flask","fastapi","pandas","numpy"],"Linux / DevOps":["linux","ubuntu","debian","docker","kubernetes","k8s","bash","shell","devops","ansible","nginx"],Security:["security","cybersecurity","hacker","hacking","hack","ctf","pentest","malware","infosec"],"Web Dev":["javascript","js","typescript","react","vue","node","html","css","frontend","backend","api"],Business:["business","entrepreneur","startup","marketing","sales","ecommerce","money"],Design:["design","ui","ux","figma","photoshop","creative"],"Video / Content":["video","youtube","reel","reels","content","tiktok","creator"],"Open Source":["opensource","github","gitlab","foss","free"],Maroc:["maroc","morocco","marocaine","rabat","casablanca","marrakech"]};
+function classifyRow(row){const words=(String(row.caption||"")+" "+String(row.hashtags||"")).toLowerCase().match(/[\\p{L}\\p{N}]+/gu)||[];let best="Other",score=0;CATEGORIES.slice(0,-1).forEach(c=>{const n=CATEGORY_KEYWORDS[c].filter(w=>words.includes(w)).length;if(n>score){best=c;score=n}});row.category=best;const first=String(row.caption||"").split(/\\r?\\n/,1)[0].replace(/#\\w+/g," ").replace(/\\s+/g," ").trim();row.title=first?(first.length>90?first.slice(0,89).trimEnd()+"…":first):`@${row.creator||"unknown"} — ${row.date||"unknown"}`;row.description=row.caption||row.url||"";return row}ROWS.forEach(classifyRow);
+const savedCount=ROWS.filter(r=>r.saved).length,likedCount=ROWS.filter(r=>r.liked).length,bothCount=ROWS.filter(r=>r.saved&&r.liked).length,ownCount=ROWS.filter(r=>String(r.url||"").startsWith("instagram://own/")).length,representedCategories=new Set(ROWS.map(r=>r.category));
+document.getElementById("totals").textContent=`${ROWS.length} posts · ${ownCount} own · ${savedCount} saved · ${likedCount} liked · ${bothCount} both · ${representedCategories.size} categories`;
+const category=document.getElementById("category"),hashtag=document.getElementById("hashtag");CATEGORIES.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;category.appendChild(o)});const tagCounts=new Map();ROWS.forEach(r=>(r.hashtags||"").split(",").filter(Boolean).forEach(t=>tagCounts.set(t.toLowerCase(),(tagCounts.get(t.toLowerCase())||0)+1)));[...tagCounts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,50).forEach(([t])=>{const o=document.createElement("option");o.value=t;o.textContent="#"+t;hashtag.appendChild(o)});
+let active="all";const search=document.getElementById("search"),sort=document.getElementById("sort"),group=document.getElementById("group");
+function card(r){const a=document.createElement("article");a.className="post";const h=document.createElement("h2");h.className="post-title";h.textContent=r.title;a.appendChild(h);const m=document.createElement("div");m.className="meta";m.textContent=`@${r.creator||"unknown"} · ${r.date||"unknown"}`;if(r.saved){const b=document.createElement("span");b.className="badge saved";b.textContent="saved";m.appendChild(b)}if(r.liked){const b=document.createElement("span");b.className="badge liked";b.textContent="liked";m.appendChild(b)}a.appendChild(m);const d=document.createElement("p");d.className="description";d.textContent=r.description;a.appendChild(d);const more=document.createElement("button");more.className="read-more";more.textContent="Read more";more.onclick=()=>{d.classList.toggle("expanded");more.textContent=d.classList.contains("expanded")?"Show less":"Read more"};a.appendChild(more);const tags=document.createElement("div");tags.className="hashtags";(r.hashtags||"").split(",").filter(Boolean).slice(0,6).forEach(t=>{const s=document.createElement("span");s.className="hashtag";s.textContent="#"+t;tags.appendChild(s)});a.appendChild(tags);const f=document.createElement("div");f.className="card-footer";const c=document.createElement("span");c.className="category-chip";c.textContent=r.category;f.appendChild(c);const link=document.createElement("a");link.className="post-link";link.textContent="Open on Instagram →";link.href=r.url||"#";link.target="_blank";link.rel="noopener noreferrer";f.appendChild(link);a.appendChild(f);return a}
+function render(){const q=search.value.trim().toLowerCase(),filtered=ROWS.filter(r=>{const type=active==="all"||(active==="saved"&&r.saved&&!r.liked)||(active==="liked"&&r.liked&&!r.saved)||(active==="both"&&r.saved&&r.liked);return type&&(!category.value||r.category===category.value)&&(!hashtag.value||(r.hashtags||"").toLowerCase().split(",").includes(hashtag.value))&&[r.creator,r.title,r.caption,r.hashtags,r.url].join(" ").toLowerCase().includes(q)});if(sort.value==="creator")filtered.sort((a,b)=>(a.creator||"").localeCompare(b.creator||"",undefined,{sensitivity:"base"}));else filtered.sort((a,b)=>{const x=Date.parse(a.date)||0,y=Date.parse(b.date)||0;return sort.value==="oldest"?x-y:y-x});const out=document.getElementById("results");out.replaceChildren();document.getElementById("result-count").textContent=`Showing ${filtered.length} of ${ROWS.length} posts`;if(!filtered.length){const p=document.createElement("p");p.className="empty";p.textContent="No posts to display.";out.appendChild(p);return}if(group.value==="none"){const grid=document.createElement("div");grid.className="cards";filtered.forEach(r=>grid.appendChild(card(r)));out.appendChild(grid);return}const groups=new Map();filtered.forEach(r=>{const key=group.value==="category"?r.category:(r.saved&&r.liked?"Both":r.saved?"Saved only":r.liked?"Liked only":"Neither");if(!groups.has(key))groups.set(key,[]);groups.get(key).push(r)});[...groups].forEach(([name,items])=>{const section=document.createElement("section");section.className="group-section";const h=document.createElement("h2");h.className="group-heading";h.textContent=`${name} · ${items.length} posts`;section.appendChild(h);const grid=document.createElement("div");grid.className="cards";items.forEach(r=>grid.appendChild(card(r)));section.appendChild(grid);out.appendChild(section)})}
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{active=t.dataset.filter;document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===t));render()}));[search,category,hashtag,sort,group].forEach(x=>x.addEventListener(x===search?"input":"change",render));render();
+</script></body></html>""".replace("__ROWS__", embedded_rows)
     output_path.write_text(html, encoding="utf-8")
     print(f"HTML library written to {output_path}")
 
@@ -412,7 +116,7 @@ def cmd_export_html() -> None:
 def main() -> None:
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  uv run python main.py import")
+        print("  uv run python main.py import [--mode=own|all]")
         print("  uv run python main.py list")
         print("  uv run python main.py search <keyword>")
         print("  uv run python main.py stats")
@@ -421,7 +125,8 @@ def main() -> None:
 
     command = sys.argv[1]
     if command == "import":
-        cmd_import()
+        mode = "all" if "--mode=all" in sys.argv else DEFAULT_MODE
+        cmd_import(mode=mode)
     elif command == "list":
         cmd_list()
     elif command == "search":

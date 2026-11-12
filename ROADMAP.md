@@ -7,6 +7,8 @@
 - [x] Keyword search
 
 ## v0.2 — Library
+- [x] `--mode` flag: own (default, BYOP-safe) vs all (opt-in saved+liked)
+- [x] Own-posts importer (`your_instagram_activity/content/posts_*.json`)
 - [ ] Duplicate detection
 - [ ] Filters (creator, date, type)
 - [ ] Index Markdown file

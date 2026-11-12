@@ -2,10 +2,9 @@
 
 Supports both shapes seen in Meta exports:
   OLD: {"title":"user","string_list_data":[{"href":"...","timestamp":N}]}
-  NEW (2026): [{"timestamp":N,"fbid":"...","media":[],
-                "label_values":[{"label":"URL","value":"https://..."},
-                                {"dict":[{"dict":[{"label":"Name","value":"user"}]}]}]}]
+  NEW (2026): [{"timestamp":N,"fbid":"...","media":[],"label_values":[...]}]
 """
+import hashlib
 import json
 import re
 import zipfile
@@ -14,6 +13,8 @@ from .models import Post
 
 SAVED_PATTERNS = ("saved_posts.json",)
 LIKED_PATTERNS = ("liked_posts.json",)
+OWN_PATTERNS = ("posts_1.json", "posts_2.json", "posts_3.json",
+                "posts_4.json", "posts_5.json", "posts.json")
 
 
 def _find_files(zf: zipfile.ZipFile, patterns: tuple[str, ...]) -> list[str]:
@@ -52,9 +53,9 @@ def _collect_labels(obj, out: dict) -> None:
 
 def _find_label(labels: dict, *names: str) -> str | None:
     for name in names:
-        for k, v in labels.items():
-            if k.lower() == name.lower() and isinstance(v, str) and v.strip():
-                return v.strip()
+        for key, value in labels.items():
+            if key.lower() == name.lower() and isinstance(value, str) and value.strip():
+                return value.strip()
     return None
 
 
@@ -106,20 +107,68 @@ def _extract(record: dict, interaction: str) -> Post | None:
         return None
 
 
-def import_export(zip_path: Path) -> list[Post]:
+def _extract_own(record: dict) -> Post | None:
+    """Extract a Post from an own-posts record (your_instagram_activity/content)."""
+    if not isinstance(record, dict):
+        return None
+    media = record.get("media")
+    if not isinstance(media, list) or not media or not isinstance(media[0], dict):
+        return None
+    item = media[0]
+    uri = item.get("uri")
+    identity = record.get("fbid") or item.get("fbid") or uri
+    if not identity:
+        return None
+    digest = hashlib.sha256(str(identity).encode("utf-8")).hexdigest()
+    url = f"instagram://own/{digest}"
+    caption = item.get("title")
+    if isinstance(caption, str):
+        caption = caption[:2000] or None
+    else:
+        caption = None
+    hashtags = None
+    if caption:
+        unique_tags = list(dict.fromkeys(
+            match.lower() for match in re.findall(r"#(\w+)", caption)
+        ))
+        hashtags = ",".join(unique_tags) or None
+    ts = item.get("creation_timestamp")
+    timestamp = ts if isinstance(ts, int) else None
+    try:
+        return Post(
+            url=url, creator="me", timestamp=timestamp, interaction="own",
+            caption=caption, hashtags=hashtags,
+        )
+    except ValueError:
+        return None
+
+
+def import_export(zip_path: Path, mode: str = "own") -> list[Post]:
+    if mode not in {"own", "all"}:
+        raise ValueError(f"Unknown mode: {mode}")
     posts: list[Post] = []
     with zipfile.ZipFile(zip_path) as zf:
-        for patterns, interaction in (
-            (SAVED_PATTERNS, "saved"),
-            (LIKED_PATTERNS, "liked"),
-        ):
-            for name in _find_files(zf, patterns):
-                try:
-                    data = json.loads(zf.read(name))
-                except json.JSONDecodeError:
-                    continue
-                for record in _iter_records(data):
-                    post = _extract(record, interaction)
-                    if post:
-                        posts.append(post)
+        for name in _find_files(zf, OWN_PATTERNS):
+            try:
+                data = json.loads(zf.read(name))
+            except json.JSONDecodeError:
+                continue
+            for record in _iter_records(data):
+                post = _extract_own(record)
+                if post:
+                    posts.append(post)
+        if mode == "all":
+            for patterns, interaction in (
+                (SAVED_PATTERNS, "saved"),
+                (LIKED_PATTERNS, "liked"),
+            ):
+                for name in _find_files(zf, patterns):
+                    try:
+                        data = json.loads(zf.read(name))
+                    except json.JSONDecodeError:
+                        continue
+                    for record in _iter_records(data):
+                        post = _extract(record, interaction)
+                        if post:
+                            posts.append(post)
     return posts

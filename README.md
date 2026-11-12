@@ -16,11 +16,16 @@ searchable Markdown knowledge base.
 4. Generates one Markdown file per post.
 5. Searches by keyword.
 
+**Default scope:** the tool imports only posts authored by the account
+owner — your own posts. Saved and liked posts (which contain other
+creators' handles) are opt-in via `--mode=all`. See DATA_HANDLING.md.
+
 ## Run it
 
     uv sync
     uv run python scripts/make_demo_zip.py
-    uv run python main.py import
+    uv run python main.py import             # default: only your OWN posts (BYOP-safe)
+    uv run python main.py import --mode=all  # opt-in: also import saved + liked posts
     uv run python main.py list
     uv run python main.py search term
 
