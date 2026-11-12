@@ -34,3 +34,13 @@ def test_import_own_posts_default_and_all_mode(tmp_path):
     posts_all = import_export(zip_path, mode="all")
     assert len(posts_all) == 2
     assert {post.interaction for post in posts_all} == {"own", "saved"}
+
+
+def test_own_mode_empty_zip_returns_empty(tmp_path):
+    """Own mode on a zip with no posts_*.json returns an empty list."""
+    import zipfile, json
+    from src.instagram_lab.importer import import_export
+    zip_path = tmp_path / "empty.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("saved_posts.json", json.dumps([]))
+    assert import_export(zip_path, mode="own") == []

@@ -26,6 +26,11 @@ creators' handles) are opt-in via `--mode=all`. See DATA_HANDLING.md.
     uv run python scripts/make_demo_zip.py
     uv run python main.py import             # default: only your OWN posts (BYOP-safe)
     uv run python main.py import --mode=all  # opt-in: also import saved + liked posts
+
+If `--mode=own` prints "No own-posts found", your export did not
+include your own posts. Use `--mode=all` to import the saved and
+liked posts instead.
+
     uv run python main.py list
     uv run python main.py search term
 

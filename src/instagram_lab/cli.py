@@ -22,12 +22,25 @@ def cmd_import(mode: str = DEFAULT_MODE) -> None:
         return
 
     print(f"  Mode: {mode}")
+    total_imported = 0
     for z in zips:
         print(f"Importing: {z.name}")
         posts = import_export(z, mode=mode)
         print(f"  Found {len(posts)} raw records")
+        total_imported += len(posts)
         touched = upsert_posts(posts)
         print(f"  Saved to database: {touched}")
+
+    if mode == "own" and total_imported == 0:
+        print()
+        print("No own-posts found in your export.")
+        print("Your export likely does not contain")
+        print("  your_instagram_activity/content/posts_*.json")
+        print()
+        print("To import saved + liked posts instead (opt-in):")
+        print("  uv run python main.py import --mode=all")
+        print()
+        print("See DATA_HANDLING.md for the data scope of each mode.")
 
     rows = all_posts()
     for row in rows:
