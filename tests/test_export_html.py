@@ -32,5 +32,5 @@ def test_export_html_creates_file(tmp_path, monkeypatch):
     output_file = output_dir / "index.html"
     assert output_file.exists()
     contents = output_file.read_text(encoding="utf-8")
-    assert "<html>" in contents
+    assert "<html" in contents
     assert "https://example.com/known-post" in contents
