@@ -53,3 +53,37 @@ def test_export_html_renders_caption(tmp_path, monkeypatch):
     contents = (output_dir / "index.html").read_text(encoding="utf-8")
     assert "hello world" in contents
     assert "python,flask" in contents
+
+
+# Check that generated rich cards include caption text and the category interface.
+def test_export_html_renders_rich_card(tmp_path, monkeypatch):
+    db_path = tmp_path / "rich-card.db"
+    monkeypatch.setattr(database, "DB_PATH", db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(database.SCHEMA)
+        conn.execute(
+            """
+            INSERT INTO posts (url, creator, timestamp, saved, liked, caption, hashtags)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "https://www.instagram.com/p/RICH/",
+                "someone",
+                1704067200,
+                1,
+                0,
+                "Learn #Python fast — short tutorial",
+                "python,learning",
+            ),
+        )
+    output_dir = tmp_path / "rich-html-output"
+    monkeypatch.setattr(cli, "KNOWLEDGE_DIR", output_dir)
+    monkeypatch.setattr(cli, "ensure_dirs", lambda: None)
+
+    cli.cmd_export_html()
+
+    contents = (output_dir / "index.html").read_text(encoding="utf-8")
+    assert "Learn" in contents
+    assert "short tutorial" in contents
+    assert "Python" in contents or "python" in contents
+    assert "category" in contents
