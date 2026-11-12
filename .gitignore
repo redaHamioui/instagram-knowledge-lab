@@ -1,0 +1,23 @@
+# --- Python ---
+__pycache__/
+*.pyc
+.venv/
+.uv/
+
+# --- Project data (NEVER commit) ---
+data/raw/
+data/db/
+data/knowledge/
+*.zip
+*.json
+!tests/fixtures/*.json
+
+# --- Secrets ---
+.env
+.env.*
+cookies.json
+session*.json
+
+# --- OS ---
+.DS_Store
+Thumbs.db
